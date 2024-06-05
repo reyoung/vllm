@@ -12,6 +12,12 @@ FROM nvidia/cuda:12.4.1-devel-ubuntu22.04 AS dev
 RUN apt-get update -y \
     && apt-get install -y python3-pip git
 
+# max jobs used by Ninja to build extensions
+ARG max_jobs=2
+ENV MAX_JOBS=${max_jobs}
+#
+
+
 # Workaround for https://github.com/openai/triton/issues/2507 and
 # https://github.com/pytorch/pytorch/issues/107960 -- hopefully
 # this won't be needed for future versions of this docker image
@@ -24,7 +30,23 @@ WORKDIR /workspace
 COPY requirements-common.txt requirements-common.txt
 COPY requirements-cuda.txt requirements-cuda.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu124 && \
     pip install -r requirements-cuda.txt
+
+RUN --mount=type=cache,target=/root/.cache/pip\
+    mkdir -p /src && cd /src && \
+    git clone --depth 1 --recursive https://github.com/vllm-project/flash-attention.git &&\
+    cd flash-attention &&\
+    sed -i 's#.*install_requires.*##g' setup.py &&\
+    python3 setup.py bdist_wheel &&\
+    pip install dist/*whl
+
+RUN --mount=type=cache,target=/root/.cache/pip\
+    mkdir -p /src && cd /src && \
+    git clone --depth 1 --recursive https://github.com/facebookresearch/xformers.git &&\
+    cd xformers && \
+    python3 setup.py bdist_wheel && \
+    pip install dist/*whl
 
 # install development dependencies
 COPY requirements-dev.txt requirements-dev.txt
@@ -96,9 +118,21 @@ RUN apt-get update -y \
 RUN ldconfig /usr/local/cuda-12.4/compat/
 
 # install vllm wheel first, so that torch etc will be installed
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cu124
+
+RUN --mount=type=bind,from=build,src=/src/flash-attention/dist,target=/flash-attention/dist \
+    --mount=type=cache,target=/root/.cache/pip \
+    pip install /flash-attention/dist/*.whl --verbose
+
+RUN --mount=type=bind,from=build,src=/src/xformers/dist,target=/xformers/dist \
+    --mount=type=cache,target=/root/.cache/pip \
+    pip install /xformers/dist/*.whl --verbose
+
 RUN --mount=type=bind,from=build,src=/workspace/dist,target=/vllm-workspace/dist \
     --mount=type=cache,target=/root/.cache/pip \
     pip install dist/*.whl --verbose
+
 #################### vLLM installation IMAGE ####################
 
 
