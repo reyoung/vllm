@@ -1,6 +1,7 @@
 from typing import (TYPE_CHECKING, List, Literal, Optional, Sequence,
                     TypedDict, Union, cast, overload)
 
+import torch
 from typing_extensions import NotRequired
 
 if TYPE_CHECKING:
@@ -110,6 +111,28 @@ class TextTokensPrompt(TypedDict):
     """
 
 
+class TextTokensPromptWithKVCache(TypedDict):
+    """It is assumed that :attr:`prompt` is consistent with
+    :attr:`prompt_token_ids` and :attr:`prompt_kv_cache`.
+    This is currently used for separating prefilling and
+    completion, and prefix tuning for LLMs."""
+
+    prompt: str
+    """The prompt text."""
+
+    prompt_token_ids: List[int]
+    """The token IDs of the prompt."""
+
+    prompt_kv_cache: torch.Tensor
+    """The key-value cache of the prompt, in shape [LayerID, SeqLen, Dim]"""
+
+    multi_modal_data: NotRequired["MultiModalDataDict"]
+    """
+    Optional multi-modal data to pass to the model,
+    if the model supports it.
+    """
+
+
 PromptStrictInputs = Union[str, TextPrompt, TokensPrompt]
 """
 The inputs to the LLM, which can take one of the following forms:
@@ -118,7 +141,7 @@ The inputs to the LLM, which can take one of the following forms:
 - A tokenized prompt (:class:`TokensPrompt`)
 """
 
-PromptInputs = Union[str, TextPrompt, TokensPrompt, TextTokensPrompt]
+PromptInputs = Union[str, TextPrompt, TokensPrompt, TextTokensPrompt, TextTokensPromptWithKVCache]
 """Same as :const:`PromptStrictInputs` but additionally accepts
 :class:`TextTokensPrompt`."""
 
